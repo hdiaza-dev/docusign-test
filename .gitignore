@@ -158,7 +158,6 @@ dist/
 .pnp.*
 
 # DocuSign sensitive files
-private_key.pem
 *.p12
 *.pfx
 
