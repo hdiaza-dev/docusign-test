@@ -33,42 +33,61 @@ public class DocuSignConfig {
     @Value("${docusign.accountId}")
     private String accountId;
 
-    @Value("${docusign.privateKeyFilename}")
+    // NUEVO: ruta absoluta de secret file (Render)
+    @Value("${docusign.privateKeyPath:}")
+    private String privateKeyPath;
+
+    // LEGADO: nombre de fichero en resources (solo útil en local)
+    @Value("${docusign.privateKeyFilename:}")
     private String privateKeyFilename;
 
     @Value("${docusign.scopes}")
     private String scopes;
-
-    public ApiClient createFreshApiClient() throws Exception {
-        ApiClient apiClient = new ApiClient(basePath);
-        apiClient.setOAuthBasePath(authServer);
-
-        String privateKey = loadPrivateKeyPem(privateKeyFilename);
-        List<String> scopeList = Arrays.asList(scopes.split("\s+"));
-
-        // Request JWT token (valid for ~1 hour). The SDK handles grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
-        OAuth.OAuthToken oAuthToken = apiClient.requestJWTUserToken(
-                clientId, userId, scopeList, privateKey.getBytes(StandardCharsets.UTF_8), 3600);
-
-        apiClient.setAccessToken(oAuthToken.getAccessToken(), oAuthToken.getExpiresIn());
-        return apiClient;
-    }
 
     @Bean
     public ApiClient apiClient() throws Exception {
         return createFreshApiClient();
     }
 
+    public ApiClient createFreshApiClient() throws Exception {
+        ApiClient apiClient = new ApiClient(basePath);
+        apiClient.setOAuthBasePath(authServer);
+
+        String privateKey = resolvePrivateKeyPem();
+        List<String> scopeList = Arrays.asList(scopes.split("\\s+"));
+
+        // JWT (1h aprox)
+        OAuth.OAuthToken token = apiClient.requestJWTUserToken(
+                clientId, userId, scopeList, privateKey.getBytes(StandardCharsets.UTF_8), 3600);
+
+        apiClient.setAccessToken(token.getAccessToken(), token.getExpiresIn());
+        return apiClient;
+    }
+
     public String getAccountId() {
         return accountId;
     }
 
-    private String loadPrivateKeyPem(String filename) throws IOException {
-        try {
-            Path path = Path.of("src/main/resources/" + filename);
-            return Files.readString(path, StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            throw new IOException("Private key PEM file not found: " + filename + ". Place it under src/main/resources/", ex);
+    private String resolvePrivateKeyPem() throws IOException {
+        // 1) ENV con contenido PEM completo (incluyendo líneas BEGIN/END)
+        String envPem = System.getenv("DOCUSIGN_PRIVATE_KEY");
+        if (envPem != null && !envPem.isBlank()) {
+            return envPem;
         }
+
+        // 2) Secret file montado (Render) => docusign.privateKeyPath=/app/config/private_key.pem
+        if (privateKeyPath != null && !privateKeyPath.isBlank()) {
+            return Files.readString(Path.of(privateKeyPath), StandardCharsets.UTF_8);
+        }
+
+        // 3) Fallback local: buscar en resources por filename
+        if (privateKeyFilename != null && !privateKeyFilename.isBlank()) {
+            Path path = Path.of("src/main/resources/" + privateKeyFilename);
+            if (Files.exists(path)) {
+                return Files.readString(path, StandardCharsets.UTF_8);
+            }
+        }
+
+        throw new IOException("Private key PEM not found. Provide DOCUSIGN_PRIVATE_KEY (env) or docusign.privateKeyPath (file).");
     }
 }
