@@ -2,16 +2,16 @@ package com.example.docusignapp.controller;
 
 import com.docusign.esign.client.ApiException;
 import com.example.docusignapp.service.DocuSignService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.context.annotation.Profile;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
-@Profile("docusign")
+@ConditionalOnProperty(name = "docusign.enabled", havingValue = "true")
 public class EnvelopeController {
 
     private final DocuSignService service;
@@ -21,10 +21,14 @@ public class EnvelopeController {
     }
 
     @PostMapping("/envelopes")
-    public ResponseEntity<?> createEnvelopeAndRecipientView(@RequestBody CreateEnvelopeRequest req) {
+    public ResponseEntity<?> createEnvelopeAndRecipientView(
+            @RequestParam String signerName,
+            @RequestParam String signerEmail,
+            @RequestParam String returnUrl,
+            @RequestParam("pdfFile") org.springframework.web.multipart.MultipartFile pdfFile) {
         try {
-            String envelopeId = service.createEnvelopeWithQuestionnaire(req.signerName(), req.signerEmail(), req.answers());
-            String signingUrl = service.createRecipientViewUrl(envelopeId, req.signerName(), req.signerEmail(), req.returnUrl());
+            String envelopeId = service.createEnvelopeWithPdf(signerName, signerEmail, pdfFile);
+            String signingUrl = service.createRecipientViewUrl(envelopeId, signerName, signerEmail, returnUrl);
             Map<String, Object> resp = new HashMap<>();
             resp.put("envelopeId", envelopeId);
             resp.put("signingUrl", signingUrl);

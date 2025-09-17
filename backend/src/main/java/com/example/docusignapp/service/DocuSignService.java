@@ -5,8 +5,8 @@ import com.docusign.esign.client.ApiClient;
 import com.docusign.esign.client.ApiException;
 import com.docusign.esign.model.*;
 import com.example.docusignapp.config.DocuSignConfig;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.context.annotation.Profile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@Profile("docusign")
+@ConditionalOnProperty(name = "docusign.enabled", havingValue = "true")
 public class DocuSignService {
 
     private final ApiClient apiClient;
@@ -26,6 +26,22 @@ public class DocuSignService {
     }
 
     public String createEnvelopeWithQuestionnaire(String signerName, String signerEmail, Map<String, Object> answers) throws ApiException {
+        try {
+            return doCreateEnvelope(signerName, signerEmail, answers, apiClient);
+        } catch (ApiException e) {
+            if (e.getCode() == 401 || e.getMessage().contains("token")) {
+                try {
+                    ApiClient freshClient = config.createFreshApiClient();
+                    return doCreateEnvelope(signerName, signerEmail, answers, freshClient);
+                } catch (Exception ex) {
+                    throw new ApiException("Failed to refresh token: " + ex.getMessage());
+                }
+            }
+            throw e;
+        }
+    }
+
+    private String doCreateEnvelope(String signerName, String signerEmail, Map<String, Object> answers, ApiClient client) throws ApiException {
         // Build a simple HTML document including the questionnaire answers
         String html = buildHtmlQuestionnaire(signerName, answers);
         byte[] docBytes = html.getBytes(StandardCharsets.UTF_8);
@@ -52,6 +68,7 @@ public class DocuSignService {
         signer.setName(signerName);
         signer.setRecipientId("1");
         signer.setRoutingOrder("1");
+        signer.setClientUserId("1000");
         signer.setTabs(tabs);
 
         Recipients recipients = new Recipients();
@@ -61,9 +78,9 @@ public class DocuSignService {
         envelope.setEmailSubject("Firma de cuestionario");
         envelope.setDocuments(List.of(doc));
         envelope.setRecipients(recipients);
-        envelope.setStatus("created"); // create as draft; we'll use embedded signing
+        envelope.setStatus("sent"); // send envelope for embedded signing
 
-        EnvelopesApi envelopesApi = new EnvelopesApi(apiClient);
+        EnvelopesApi envelopesApi = new EnvelopesApi(client);
         EnvelopeSummary summary = envelopesApi.createEnvelope(config.getAccountId(), envelope);
         return summary.getEnvelopeId();
     }

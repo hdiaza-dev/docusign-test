@@ -3,10 +3,9 @@ package com.example.docusignapp.config;
 import com.docusign.esign.client.ApiClient;
 import com.docusign.esign.client.auth.OAuth;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.context.annotation.Profile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Configuration
-@Profile("docusign")
+@ConditionalOnProperty(name = "docusign.enabled", havingValue = "true")
 public class DocuSignConfig {
 
     @Value("${docusign.basePath}")
@@ -40,9 +39,7 @@ public class DocuSignConfig {
     @Value("${docusign.scopes}")
     private String scopes;
 
-    @Bean
-    @Lazy
-    public ApiClient apiClient() throws Exception {
+    public ApiClient createFreshApiClient() throws Exception {
         ApiClient apiClient = new ApiClient(basePath);
         apiClient.setOAuthBasePath(authServer);
 
@@ -55,6 +52,11 @@ public class DocuSignConfig {
 
         apiClient.setAccessToken(oAuthToken.getAccessToken(), oAuthToken.getExpiresIn());
         return apiClient;
+    }
+
+    @Bean
+    public ApiClient apiClient() throws Exception {
+        return createFreshApiClient();
     }
 
     public String getAccountId() {
