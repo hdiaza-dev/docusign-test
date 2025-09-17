@@ -8,6 +8,8 @@ import com.example.docusignapp.config.DocuSignConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -25,14 +27,14 @@ public class DocuSignService {
         this.config = config;
     }
 
-    public String createEnvelopeWithQuestionnaire(String signerName, String signerEmail, Map<String, Object> answers) throws ApiException {
+    public String createEnvelopeWithPdf(String signerName, String signerEmail, MultipartFile pdfFile) throws ApiException {
         try {
-            return doCreateEnvelope(signerName, signerEmail, answers, apiClient);
+            return doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, apiClient);
         } catch (ApiException e) {
             if (e.getCode() == 401 || e.getMessage().contains("token")) {
                 try {
                     ApiClient freshClient = config.createFreshApiClient();
-                    return doCreateEnvelope(signerName, signerEmail, answers, freshClient);
+                    return doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, freshClient);
                 } catch (Exception ex) {
                     throw new ApiException("Failed to refresh token: " + ex.getMessage());
                 }
@@ -41,48 +43,50 @@ public class DocuSignService {
         }
     }
 
-    private String doCreateEnvelope(String signerName, String signerEmail, Map<String, Object> answers, ApiClient client) throws ApiException {
-        // Build a simple HTML document including the questionnaire answers
-        String html = buildHtmlQuestionnaire(signerName, answers);
-        byte[] docBytes = html.getBytes(StandardCharsets.UTF_8);
-        String base64Doc = Base64.getEncoder().encodeToString(docBytes);
+    private String doCreateEnvelopeWithPdf(String signerName, String signerEmail, MultipartFile pdfFile, ApiClient client) throws ApiException {
+        try {
+            byte[] pdfBytes = pdfFile.getBytes();
+            String base64Doc = Base64.getEncoder().encodeToString(pdfBytes);
 
-        Document doc = new Document();
-        doc.setDocumentBase64(base64Doc);
-        doc.setName("Cuestionario.html");
-        doc.setFileExtension("html");
-        doc.setDocumentId("1");
+            Document doc = new Document();
+            doc.setDocumentBase64(base64Doc);
+            doc.setName(pdfFile.getOriginalFilename());
+            doc.setFileExtension("pdf");
+            doc.setDocumentId("1");
 
-        // SignHere tab using anchor string
-        SignHere signHere = new SignHere();
-        signHere.setAnchorString("/firma/");
-        signHere.setAnchorUnits("pixels");
-        signHere.setAnchorXOffset("0");
-        signHere.setAnchorYOffset("0");
+            // SignHere tab positioned at the end of the document
+            SignHere signHere = new SignHere();
+            signHere.setDocumentId("1");
+            signHere.setPageNumber("1");
+            signHere.setXPosition("100");
+            signHere.setYPosition("700");
 
-        Tabs tabs = new Tabs();
-        tabs.setSignHereTabs(List.of(signHere));
+            Tabs tabs = new Tabs();
+            tabs.setSignHereTabs(List.of(signHere));
 
-        Signer signer = new Signer();
-        signer.setEmail(signerEmail);
-        signer.setName(signerName);
-        signer.setRecipientId("1");
-        signer.setRoutingOrder("1");
-        signer.setClientUserId("1000");
-        signer.setTabs(tabs);
+            Signer signer = new Signer();
+            signer.setEmail(signerEmail);
+            signer.setName(signerName);
+            signer.setRecipientId("1");
+            signer.setRoutingOrder("1");
+            signer.setClientUserId("1000");
+            signer.setTabs(tabs);
 
-        Recipients recipients = new Recipients();
-        recipients.setSigners(List.of(signer));
+            Recipients recipients = new Recipients();
+            recipients.setSigners(List.of(signer));
 
-        EnvelopeDefinition envelope = new EnvelopeDefinition();
-        envelope.setEmailSubject("Firma de cuestionario");
-        envelope.setDocuments(List.of(doc));
-        envelope.setRecipients(recipients);
-        envelope.setStatus("sent"); // send envelope for embedded signing
+            EnvelopeDefinition envelope = new EnvelopeDefinition();
+            envelope.setEmailSubject("Firma de documento PDF");
+            envelope.setDocuments(List.of(doc));
+            envelope.setRecipients(recipients);
+            envelope.setStatus("sent");
 
-        EnvelopesApi envelopesApi = new EnvelopesApi(client);
-        EnvelopeSummary summary = envelopesApi.createEnvelope(config.getAccountId(), envelope);
-        return summary.getEnvelopeId();
+            EnvelopesApi envelopesApi = new EnvelopesApi(client);
+            EnvelopeSummary summary = envelopesApi.createEnvelope(config.getAccountId(), envelope);
+            return summary.getEnvelopeId();
+        } catch (IOException e) {
+            throw new ApiException("Error reading PDF file: " + e.getMessage());
+        }
     }
 
     public String createRecipientViewUrl(String envelopeId, String signerName, String signerEmail, String returnUrl) throws ApiException {
