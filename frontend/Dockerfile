@@ -2,6 +2,8 @@
 FROM node:20-bullseye AS build
 WORKDIR /app
 
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 COPY package*.json ./
 RUN npm ci
 
