@@ -1,26 +1,24 @@
-# ===== Build stage =====
+# ===== Build =====
 FROM node:20-bullseye AS build
 WORKDIR /app
-
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 COPY package*.json ./
 RUN npm ci
-
 COPY . .
 RUN npm run build
 
-# ===== Run stage =====
+# ===== Run =====
 FROM nginx:1.27-alpine AS run
-# Copia artefacto Vite
+WORKDIR /app
+
+# Copiamos el estático
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Nginx config para SPA (fallback a index.html)
-RUN rm /etc/nginx/conf.d/default.conf
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copiamos plantilla con ${PORT} (no el config final)
+COPY default.conf.template /etc/nginx/templates/default.conf.template
 
-# Render inyecta PORT; nginx usa 8080 aquí para respetarlo
+# Render inyecta PORT en runtime
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# Generamos el config real sustituyendo ${PORT} y lanzamos nginx
+CMD sh -c "envsubst '\$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
