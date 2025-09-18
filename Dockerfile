@@ -6,11 +6,16 @@ RUN npm ci
 RUN npm run build
 
 # ===== Build backend con imagen de Gradle (sin wrapper) =====
-FROM gradle:8.8-jdk17-alpine AS backend-build
+FROM gradle:8.8-jdk17 AS backend-build
 WORKDIR /app
+# Copiamos TODO el backend (incluye gradle.properties si lo tienes)
 COPY backend/ ./
-# Si no quieres ejecutar tests en el build, añade -x test
-RUN gradle --no-daemon --stacktrace --info clean bootJar
+
+# Memoria extra para Gradle dentro del contenedor
+ENV GRADLE_OPTS="-Xmx1024m -Dorg.gradle.daemon=false"
+
+# Build del jar (omitimos tests para evitar transforms del árbol de test)
+RUN gradle --no-daemon --stacktrace --info clean bootJar -x test
 
 # ===== Run (monolito) =====
 FROM eclipse-temurin:17-jre-alpine AS run
