@@ -61,6 +61,20 @@ public class DocuSignConfig {
         return accountId;
     }
 
+    public ApiClient createFreshApiClient() throws Exception {
+        ApiClient freshClient = new ApiClient(basePath);
+        freshClient.setOAuthBasePath(authServer);
+
+        String privateKey = resolvePrivateKeyPem();
+        List<String> scopeList = Arrays.asList(scopes.split("\\s+"));
+
+        OAuth.OAuthToken token = freshClient.requestJWTUserToken(
+                clientId, userId, scopeList, privateKey.getBytes(StandardCharsets.UTF_8), 3600);
+
+        freshClient.setAccessToken(token.getAccessToken(), token.getExpiresIn());
+        return freshClient;
+    }
+
     private String resolvePrivateKeyPem() throws IOException {
         // 1) ENV (contenido PEM completo)
         String envPem = System.getenv("DOCUSIGN_PRIVATE_KEY");
