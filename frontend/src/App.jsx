@@ -37,7 +37,7 @@ export default function App() {
     formData.append('returnUrl', window.location.origin + '/firmado')
     formData.append('pdfFile', pdfFile)
     
-    const res = await axios.post('http://localhost:8080/api/envelopes', formData, {
+    const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/envelopes`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     setSignUrl(res.data.signingUrl)

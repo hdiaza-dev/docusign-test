@@ -3,7 +3,7 @@ FROM node:20-bullseye AS frontend-build
 WORKDIR /frontend
 COPY frontend/ ./
 RUN npm ci
-RUN npm run build
+RUN npm run build -- --mode dev
 
 # ===== Build backend con imagen de Gradle (sin wrapper) =====
 FROM gradle:8.8-jdk17 AS backend-build
