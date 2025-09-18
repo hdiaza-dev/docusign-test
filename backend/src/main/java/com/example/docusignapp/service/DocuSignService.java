@@ -5,6 +5,9 @@ import com.docusign.esign.client.ApiClient;
 import com.docusign.esign.client.ApiException;
 import com.docusign.esign.model.*;
 import com.example.docusignapp.config.DocuSignConfig;
+import com.example.docusignapp.entity.EnvelopeRecord;
+import com.example.docusignapp.repository.EnvelopeRecordRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -21,20 +24,29 @@ public class DocuSignService {
 
     private final ApiClient apiClient;
     private final DocuSignConfig config;
+    private final EnvelopeRecordRepository repository;
+    
+    @Value("${docusign.webhookUrl}")
+    private String webhookUrl;
 
-    public DocuSignService(ApiClient apiClient, DocuSignConfig config) {
+    public DocuSignService(ApiClient apiClient, DocuSignConfig config, EnvelopeRecordRepository repository) {
         this.apiClient = apiClient;
         this.config = config;
+        this.repository = repository;
     }
 
     public String createEnvelopeWithPdf(String signerName, String signerEmail, MultipartFile pdfFile) throws ApiException {
         try {
-            return doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, apiClient);
+            String envelopeId = doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, apiClient);
+            saveEnvelopeRecord(envelopeId, signerName, signerEmail, pdfFile.getOriginalFilename());
+            return envelopeId;
         } catch (ApiException e) {
             if (e.getCode() == 401 || e.getMessage().contains("token")) {
                 try {
                     ApiClient freshClient = config.createFreshApiClient();
-                    return doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, freshClient);
+                    String envelopeId = doCreateEnvelopeWithPdf(signerName, signerEmail, pdfFile, freshClient);
+                    saveEnvelopeRecord(envelopeId, signerName, signerEmail, pdfFile.getOriginalFilename());
+                    return envelopeId;
                 } catch (Exception ex) {
                     throw new ApiException("Failed to refresh token: " + ex.getMessage());
                 }
@@ -80,6 +92,21 @@ public class DocuSignService {
             envelope.setDocuments(List.of(doc));
             envelope.setRecipients(recipients);
             envelope.setStatus("sent");
+            
+            // Webhook solo para HTTPS (dev/prod)
+            if (getWebhookUrl().startsWith("https://")) {
+                EventNotification eventNotification = new EventNotification();
+                eventNotification.setUrl(getWebhookUrl());
+                eventNotification.setLoggingEnabled("true");
+                eventNotification.setRequireAcknowledgment("true");
+                eventNotification.setUseSoapInterface("false");
+                
+                EnvelopeEvent envelopeEvent = new EnvelopeEvent();
+                envelopeEvent.setEnvelopeEventStatusCode("completed");
+                eventNotification.setEnvelopeEvents(List.of(envelopeEvent));
+                
+                envelope.setEventNotification(eventNotification);
+            }
 
             EnvelopesApi envelopesApi = new EnvelopesApi(client);
             EnvelopeSummary summary = envelopesApi.createEnvelope(config.getAccountId(), envelope);
@@ -124,5 +151,18 @@ public class DocuSignService {
 
     private String escape(String s) {
         return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");
+    }
+
+    private void saveEnvelopeRecord(String envelopeId, String signerName, String signerEmail, String fileName) {
+        EnvelopeRecord record = new EnvelopeRecord();
+        record.setEnvelopeId(envelopeId);
+        record.setSignerName(signerName);
+        record.setSignerEmail(signerEmail);
+        record.setFileName(fileName);
+        repository.save(record);
+    }
+
+    private String getWebhookUrl() {
+        return webhookUrl;
     }
 }

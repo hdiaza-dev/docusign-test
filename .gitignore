@@ -162,11 +162,6 @@ private_key.pem
 *.p12
 *.pfx
 
-# Application specific
-application-local.properties
-application-dev.properties
-application-prod.properties
-
 # Logs
 logs/
 *.log

@@ -2,10 +2,13 @@ package com.example.docusignapp.config;
 
 import com.docusign.esign.client.ApiClient;
 import com.docusign.esign.client.auth.OAuth;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +20,9 @@ import java.util.List;
 @Configuration
 @ConditionalOnProperty(name = "docusign.enabled", havingValue = "true")
 public class DocuSignConfig {
+
+    @Autowired
+    private ResourceLoader resourceLoader;
 
     @Value("${docusign.basePath}")
     private String basePath;
@@ -80,15 +86,15 @@ public class DocuSignConfig {
         String envPem = System.getenv("DOCUSIGN_PRIVATE_KEY");
         if (envPem != null && !envPem.isBlank()) return envPem;
 
-        // 2) Secret file montado
+        // 2) Classpath o archivo absoluto
         if (privateKeyPath != null && !privateKeyPath.isBlank()) {
-            Path p = Path.of(privateKeyPath);
             try {
-                return Files.readString(p, StandardCharsets.UTF_8);
+                Resource resource = resourceLoader.getResource(privateKeyPath);
+                if (resource.exists()) {
+                    return new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                }
             } catch (IOException e) {
-                boolean exists = Files.exists(p);
-                throw new IOException("Couldn't read PEM at " + privateKeyPath +
-                        " (exists=" + exists + ")", e);
+                throw new IOException("Couldn't read PEM at " + privateKeyPath, e);
             }
         }
 
