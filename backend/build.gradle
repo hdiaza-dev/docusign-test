@@ -19,6 +19,7 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'com.docusign:docusign-esign-java:6.0.0'
     implementation 'org.slf4j:slf4j-api:2.0.12'
     implementation 'jakarta.ws.rs:jakarta.ws.rs-api:3.1.0'
