@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: docusign-app
+    env: docker
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: SPRING_PROFILES_ACTIVE
+        value: dev
+    secretFiles:
+      - source: docusign_private_key_pem
+        path: /app/config/private_key.pem
+    healthCheckPath: /actuator/health

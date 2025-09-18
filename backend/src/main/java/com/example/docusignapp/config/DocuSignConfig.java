@@ -33,12 +33,10 @@ public class DocuSignConfig {
     @Value("${docusign.accountId}")
     private String accountId;
 
-    // NUEVO: ruta absoluta de secret file (Render)
-    @Value("${docusign.privateKeyPath:}")
+    @Value("${docusign.privateKeyPath:}")     // NUEVO: ruta absoluta (secret file)
     private String privateKeyPath;
 
-    // LEGADO: nombre de fichero en resources (solo útil en local)
-    @Value("${docusign.privateKeyFilename:}")
+    @Value("${docusign.privateKeyFilename:}") // LEGADO: resources/local
     private String privateKeyFilename;
 
     @Value("${docusign.scopes}")
@@ -46,17 +44,12 @@ public class DocuSignConfig {
 
     @Bean
     public ApiClient apiClient() throws Exception {
-        return createFreshApiClient();
-    }
-
-    public ApiClient createFreshApiClient() throws Exception {
         ApiClient apiClient = new ApiClient(basePath);
         apiClient.setOAuthBasePath(authServer);
 
         String privateKey = resolvePrivateKeyPem();
         List<String> scopeList = Arrays.asList(scopes.split("\\s+"));
 
-        // JWT (1h aprox)
         OAuth.OAuthToken token = apiClient.requestJWTUserToken(
                 clientId, userId, scopeList, privateKey.getBytes(StandardCharsets.UTF_8), 3600);
 
@@ -69,18 +62,23 @@ public class DocuSignConfig {
     }
 
     private String resolvePrivateKeyPem() throws IOException {
-        // 1) ENV con contenido PEM completo (incluyendo líneas BEGIN/END)
+        // 1) ENV (contenido PEM completo)
         String envPem = System.getenv("DOCUSIGN_PRIVATE_KEY");
-        if (envPem != null && !envPem.isBlank()) {
-            return envPem;
-        }
+        if (envPem != null && !envPem.isBlank()) return envPem;
 
-        // 2) Secret file montado (Render) => docusign.privateKeyPath=/app/config/private_key.pem
+        // 2) Secret file montado
         if (privateKeyPath != null && !privateKeyPath.isBlank()) {
-            return Files.readString(Path.of(privateKeyPath), StandardCharsets.UTF_8);
+            Path p = Path.of(privateKeyPath);
+            try {
+                return Files.readString(p, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                boolean exists = Files.exists(p);
+                throw new IOException("Couldn't read PEM at " + privateKeyPath +
+                        " (exists=" + exists + ")", e);
+            }
         }
 
-        // 3) Fallback local: buscar en resources por filename
+        // 3) Fallback local para desarrollo
         if (privateKeyFilename != null && !privateKeyFilename.isBlank()) {
             Path path = Path.of("src/main/resources/" + privateKeyFilename);
             if (Files.exists(path)) {
@@ -88,6 +86,6 @@ public class DocuSignConfig {
             }
         }
 
-        throw new IOException("Private key PEM not found. Provide DOCUSIGN_PRIVATE_KEY (env) or docusign.privateKeyPath (file).");
+        throw new IOException("Private key PEM not found. Provide DOCUSIGN_PRIVATE_KEY or docusign.privateKeyPath.");
     }
 }
