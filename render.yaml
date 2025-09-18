@@ -11,7 +11,4 @@ services:
         value: 8080
       - key: SPRING_PROFILES_ACTIVE
         value: dev
-    # Si tienes actuator añade:
     healthCheckPath: /actuator/health
-    # Si no usas actuator todavía, comenta la línea anterior o usa:
-    # healthCheckPath: /
